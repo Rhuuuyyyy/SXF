@@ -172,12 +172,22 @@ def install_node_deps() -> None:
             return
         info("package.json foi modificado — atualizando node_modules…")
 
-    result = subprocess.run(
-        [NPM, "install"],
-        cwd=FRONTEND,
-        check=False,
-    )
+    result = subprocess.run([NPM, "install"], cwd=FRONTEND, check=False)
+
     if result.returncode != 0:
+        if IS_WIN:
+            # Windows Group Policy may block native-addon post-install scripts (EPERM/napi-postinstall).
+            # Retry without them — pure-JS packages still work correctly.
+            info("npm install falhou — tentando com --ignore-scripts (política de grupo detectada)…")
+            result = subprocess.run(
+                [NPM, "install", "--ignore-scripts"],
+                cwd=FRONTEND,
+                check=False,
+            )
+            if result.returncode == 0:
+                ok("Dependências npm instaladas (pós-install scripts ignorados por política de grupo)")
+                return
+
         err("Falha ao instalar dependências npm.")
         err(f"Execute manualmente: cd {FRONTEND} && npm install")
         sys.exit(1)
