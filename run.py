@@ -159,9 +159,10 @@ def install_node_deps() -> None:
 
     node_modules = FRONTEND / "node_modules"
     lock_file    = FRONTEND / "package-lock.json"
+    # Sinal de instalação completa: o wrapper do CLI do Next.js deve existir.
+    next_bin = FRONTEND / "node_modules" / ".bin" / ("next.cmd" if IS_WIN else "next")
 
-    if node_modules.exists() and lock_file.exists():
-        # Check if package.json is newer than node_modules (deps may have changed)
+    if node_modules.exists() and lock_file.exists() and next_bin.exists():
         pkg_mtime  = (FRONTEND / "package.json").stat().st_mtime
         lock_mtime = lock_file.stat().st_mtime
         nm_mtime   = node_modules.stat().st_mtime
@@ -170,6 +171,8 @@ def install_node_deps() -> None:
             ok("node_modules já está atualizado — pulando npm install")
             return
         info("package.json foi modificado — atualizando node_modules…")
+    elif node_modules.exists() and not next_bin.exists():
+        info("Instalação anterior incompleta detectada — reinstalando dependências…")
 
     result = subprocess.run([NPM, "install"], cwd=FRONTEND, check=False)
 
