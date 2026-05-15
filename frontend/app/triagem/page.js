@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { api } from "../lib/apiClient";
 import { getSessaoId } from "../lib/auth";
 import { SINTOMA_ID_MAP } from "../lib/sintomaIds";
+import AppShell from "../components/AppShell";
+import Icons from "../components/Icons";
+import { Card, BtnPrimary, BtnGhost, Field, Pill, inputCls, inputStyle, selectCls } from "../components/ui";
 
 // ── SINTOMAS COM PESOS POR SEXO ───────────────────────────────────────────
 const SINTOMAS = [
@@ -42,28 +45,48 @@ const ETNIAS = [
   { value: "nao_declarado", label: "Não declarado" },
 ];
 
-// ── COMPONENTES UTILITÁRIOS ───────────────────────────────────────────────
+// ── STEP INDICATOR ────────────────────────────────────────────────────────
 function StepIndicator({ current }) {
   return (
-    <div className="flex items-center justify-center gap-0 mb-8">
+    <div className="flex items-center justify-center mb-8">
       {STEPS.map((s, i) => {
         const done   = i < current;
         const active = i === current;
         return (
           <div key={s} className="flex items-center">
-            <div className="flex flex-col items-center gap-1">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold border transition-all
-                ${done   ? "bg-emerald-500 border-emerald-500 text-white" : ""}
-                ${active ? "bg-blue-600 border-blue-600 text-white" : ""}
-                ${!done && !active ? "bg-white/[0.04] border-white/10 text-zinc-600" : ""}`}>
-                {done ? "✓" : i + 1}
+            <div className="flex flex-col items-center gap-1.5">
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-semibold lift"
+                style={{
+                  background: done
+                    ? "var(--sage)"
+                    : active
+                    ? "var(--ink)"
+                    : "transparent",
+                  color: done || active ? "var(--on-ink)" : "var(--subtle)",
+                  border: !done && !active ? "1px solid var(--hair)" : "none",
+                }}
+              >
+                {done ? Icons.check : i + 1}
               </div>
-              <span className={`text-[10px] font-medium whitespace-nowrap ${active ? "text-blue-400" : done ? "text-emerald-400" : "text-zinc-600"}`}>
+              <span
+                className="text-[10px] font-medium whitespace-nowrap"
+                style={{
+                  color: active
+                    ? "var(--ink)"
+                    : done
+                    ? "var(--sage)"
+                    : "var(--subtle)",
+                }}
+              >
                 {s}
               </span>
             </div>
             {i < STEPS.length - 1 && (
-              <div className={`w-12 h-px mx-1 mb-4 transition-all ${done ? "bg-emerald-500" : "bg-white/[0.07]"}`} />
+              <div
+                className="w-16 h-px mx-2 mb-4"
+                style={{ background: done ? "var(--sage)" : "var(--hair)" }}
+              />
             )}
           </div>
         );
@@ -72,53 +95,15 @@ function StepIndicator({ current }) {
   );
 }
 
-function Field({ label, required, children }) {
-  return (
-    <div className="mb-4">
-      <label className="block text-[11.5px] font-semibold text-zinc-500 uppercase tracking-wider mb-1.5">
-        {label} {required && <span className="text-red-400 normal-case">*</span>}
-      </label>
-      {children}
-    </div>
-  );
-}
-
-const inputCls  = "w-full bg-white/[0.04] border border-white/[0.07] rounded-lg px-3 py-2.5 text-[#edead4] text-sm placeholder-zinc-600 outline-none focus:border-blue-500/50 focus:bg-white/[0.06] transition-colors";
-const selectCls = inputCls + " appearance-none";
-
-function BtnPrimary({ children, onClick, disabled }) {
-  return (
-    <button onClick={onClick} disabled={disabled}
-      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:pointer-events-none text-white text-sm font-medium rounded-lg transition-colors">
-      {children}
-    </button>
-  );
-}
-
-function BtnOutline({ children, onClick }) {
-  return (
-    <button onClick={onClick}
-      className="inline-flex items-center gap-2 px-5 py-2.5 bg-transparent border border-white/10 hover:bg-white/5 text-[#edead4] text-sm font-medium rounded-lg transition-colors">
-      {children}
-    </button>
-  );
-}
-
-function Card({ children, className = "" }) {
-  return (
-    <div className={`bg-[#141413] border border-white/[0.07] rounded-xl p-6 ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-// ── COMPONENTE PRINCIPAL ──────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+//  COMPONENTE PRINCIPAL
+// ══════════════════════════════════════════════════════════════════════════
 export default function TriagemPage() {
   const router = useRouter();
   const [step, setStep]     = useState(0);
   const [errors, setErrors] = useState({});
 
-  // Dados do paciente — inclui campos obrigatórios para o backend
+  // Dados do paciente
   const [paciente, setPaciente] = useState({
     nome: "", dataNasc: "", sexo: "", responsavel: "",
     etnia: "", uf: "", municipio: "",
@@ -134,18 +119,17 @@ export default function TriagemPage() {
     Object.fromEntries(SINTOMAS.map((s) => [s.id, null]))
   );
 
-  // Estado de submissão
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
-  // ── Sintomas filtrados pelo sexo ──
+  // Sintomas filtrados pelo sexo
   const sintomasFiltrados = SINTOMAS.filter((s) => {
     if (paciente.sexo === "M") return true;
     if (paciente.sexo === "F") return s.pesoF !== null;
     return true;
   });
 
-  // ── Cálculo do score ──
+  // Cálculo do score
   function calcularScore() {
     const isMasc = paciente.sexo === "M";
     let score = 0;
@@ -161,16 +145,16 @@ export default function TriagemPage() {
     return paciente.sexo === "M" ? LIMIAR_M : LIMIAR_F;
   }
 
-  // ── Validações ──
+  // Validações
   function validarStep0() {
     const e = {};
-    if (!paciente.nome.trim())       e.nome       = "Nome é obrigatório.";
-    if (!paciente.dataNasc)          e.dataNasc   = "Data de nascimento é obrigatória.";
-    if (!paciente.sexo)              e.sexo       = "Sexo é obrigatório.";
+    if (!paciente.nome.trim())        e.nome        = "Nome é obrigatório.";
+    if (!paciente.dataNasc)           e.dataNasc    = "Data de nascimento é obrigatória.";
+    if (!paciente.sexo)               e.sexo        = "Sexo é obrigatório.";
     if (!paciente.responsavel.trim()) e.responsavel = "Responsável é obrigatório.";
-    if (!paciente.etnia)             e.etnia      = "Etnia é obrigatória.";
-    if (!paciente.uf)                e.uf         = "Estado de residência é obrigatório.";
-    if (!paciente.municipio.trim())  e.municipio  = "Município é obrigatório.";
+    if (!paciente.etnia)              e.etnia       = "Etnia é obrigatória.";
+    if (!paciente.uf)                 e.uf          = "Estado de residência é obrigatório.";
+    if (!paciente.municipio.trim())   e.municipio   = "Município é obrigatório.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -193,7 +177,6 @@ export default function TriagemPage() {
     return true;
   }
 
-  // ── Navegação ──
   function avancar() {
     if (step === 0 && !validarStep0()) return;
     if (step === 1 && !validarStep1()) return;
@@ -209,7 +192,7 @@ export default function TriagemPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // ── Submissão final — chama a API ──
+  // Submissão final — chama a API
   async function submeter() {
     setSubmitting(true);
     setSubmitError("");
@@ -217,21 +200,18 @@ export default function TriagemPage() {
     try {
       const sessaoId = getSessaoId();
 
-      // 1. Registrar o paciente
-      // PatientResponse.db_id (BIGSERIAL) é retornado diretamente — sem segundo GET.
       const patientPayload = {
-        nome:                  paciente.nome,
-        data_nascimento:       paciente.dataNasc,
-        sexo:                  paciente.sexo,
-        etnia:                 paciente.etnia,
-        uf_nascimento:         paciente.uf,  // padrão: mesmo estado de residência
-        municipio_residencia:  paciente.municipio,
-        uf_residencia:         paciente.uf,
-        grau_parentesco:       acomp.relacao || null,
-        prematuro:             false,
+        nome:                    paciente.nome,
+        data_nascimento:         paciente.dataNasc,
+        sexo:                    paciente.sexo,
+        etnia:                   paciente.etnia,
+        uf_nascimento:           paciente.uf,
+        municipio_residencia:    paciente.municipio,
+        uf_residencia:           paciente.uf,
+        grau_parentesco:         acomp.relacao || null,
+        prematuro:               false,
         tem_diagnostico_autismo: false,
         tem_diagnostico_tdah:    false,
-        // acompanhante (somente se telefone e e-mail preenchidos — ambos obrigatórios no schema)
         ...(acomp.telefone && acomp.email
           ? {
               acompanhante: {
@@ -245,13 +225,11 @@ export default function TriagemPage() {
 
       const registeredPatient = await api.createPatient(patientPayload);
 
-      // db_id é o BIGSERIAL retornado pelo POST /pacientes — usado diretamente
       const pacienteDbId = registeredPatient?.db_id;
       if (!pacienteDbId) {
         throw new Error("ID do paciente não retornado pelo servidor. Contate o suporte.");
       }
 
-      // 2. Submeter a anamnese
       const respostasPayload = sintomasFiltrados.map((s) => ({
         sintoma_id: SINTOMA_ID_MAP[s.id],
         presente:   respostas[s.id] === 1,
@@ -259,14 +237,13 @@ export default function TriagemPage() {
       }));
 
       const avalResult = await api.submitAnamnesis({
-        paciente_id:           pacienteDbId,
-        sessao_id:             sessaoId,
-        observacoes:           "",
+        paciente_id:            pacienteDbId,
+        sessao_id:              sessaoId,
+        observacoes:            "",
         diagnostico_previo_fxs: false,
-        respostas:             respostasPayload,
+        respostas:              respostasPayload,
       });
 
-      // 4. Salvar resultado e navegar para a página de resultado
       const scoreLocal = calcularScore();
       const limiarLocal = getLimiar();
 
@@ -276,9 +253,7 @@ export default function TriagemPage() {
         respostas,
         score:         avalResult?.score_final    ?? scoreLocal,
         limiar:        avalResult?.limiar_usado   ?? limiarLocal,
-        resultado:     avalResult?.recomenda_exame
-          ? "encaminhar"
-          : "baixo_risco",
+        resultado:     avalResult?.recomenda_exame ? "encaminhar" : "baixo_risco",
         data:          new Date().toISOString(),
         avaliacao_id:  avalResult?.avaliacao_id,
       };
@@ -292,43 +267,38 @@ export default function TriagemPage() {
     }
   }
 
-  // ── Resposta do questionário ──
   function setResposta(id, valor) {
     setRespostas((prev) => ({ ...prev, [id]: valor }));
     if (errors.questionario) setErrors({});
   }
 
   const totalRespondidas = sintomasFiltrados.filter((s) => respostas[s.id] !== null).length;
-  const progresso        = Math.round((totalRespondidas / sintomasFiltrados.length) * 100);
+  const progresso = Math.round((totalRespondidas / sintomasFiltrados.length) * 100);
 
   return (
-    <div className="min-h-screen bg-[#0d0d0c] text-[#edead4]">
+    <AppShell pageId="triagem">
+      <div className="max-w-3xl mx-auto pb-12">
 
-      {/* TOPBAR */}
-      <header className="sticky top-0 z-20 h-14 bg-[#141413] border-b border-white/[0.07] flex items-center justify-between px-5 lg:px-8">
-        <div className="flex items-center gap-3">
-          <button onClick={() => router.push("/dashboard")}
-            className="flex items-center gap-1.5 text-zinc-500 hover:text-[#edead4] text-[13px] transition-colors">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polyline points="15 18 9 12 15 6"/>
-            </svg>
-            Dashboard
-          </button>
-          <span className="text-white/10">/</span>
-          <span className="text-sm font-semibold">Nova Triagem</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-zinc-600 font-medium uppercase tracking-wider">SXF</span>
-        </div>
-      </header>
-
-      {/* CONTEÚDO */}
-      <div className="max-w-2xl mx-auto px-4 py-10">
-
-        {/* Título */}
-        <div className="mb-8 text-center">
-          <h1 className="text-2xl font-serif text-[#edead4] mb-1">Checklist de Triagem</h1>
-          <p className="text-sm text-zinc-500">Síndrome do X Frágil · Modelo validado com AUC 0,73 (♂) e 0,76 (♀)</p>
+        {/* ── Header ── */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-3">
+            <span
+              className="w-10 h-10 rounded-2xl flex items-center justify-center"
+              style={{ background: "var(--ink)", color: "var(--on-ink)" }}
+            >
+              {Icons.cat}
+            </span>
+          </div>
+          <h1
+            className="font-display text-[44px] leading-[1.0]"
+            style={{ color: "var(--ink)" }}
+          >
+            Triagem
+            <br />— Síndrome do X Frágil
+          </h1>
+          <p className="text-[13.5px] mt-3" style={{ color: "var(--muted)" }}>
+            Modelo validado · AUC 0,73 (♂) e 0,76 (♀)
+          </p>
         </div>
 
         {/* Step indicator */}
@@ -336,67 +306,112 @@ export default function TriagemPage() {
 
         {/* ══ STEP 0 — DADOS DO PACIENTE ══ */}
         {step === 0 && (
-          <Card>
-            <h2 className="text-base font-semibold mb-1">Dados do paciente</h2>
-            <p className="text-[12.5px] text-zinc-500 mb-6">Informe os dados do paciente que será avaliado.</p>
+          <Card className="p-7">
+            <h2
+              className="font-display text-[22px] mb-1"
+              style={{ color: "var(--ink)" }}
+            >
+              Dados do paciente
+            </h2>
+            <p className="text-[13px] mb-6" style={{ color: "var(--muted)" }}>
+              Informe os dados do paciente que será avaliado.
+            </p>
 
-            <Field label="Nome completo" required>
-              <input className={inputCls} type="text" placeholder="Nome do paciente"
-                value={paciente.nome} onChange={(e) => setPaciente({ ...paciente, nome: e.target.value })} />
-              {errors.nome && <p className="text-red-400 text-[11.5px] mt-1">{errors.nome}</p>}
+            <Field label="Nome completo" required error={errors.nome}>
+              <input
+                className={inputCls}
+                style={inputStyle}
+                type="text"
+                placeholder="Nome do paciente"
+                value={paciente.nome}
+                onChange={(e) => setPaciente({ ...paciente, nome: e.target.value })}
+              />
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Data de nascimento" required>
-                <input className={inputCls} type="date"
-                  value={paciente.dataNasc} onChange={(e) => setPaciente({ ...paciente, dataNasc: e.target.value })} />
-                {errors.dataNasc && <p className="text-red-400 text-[11.5px] mt-1">{errors.dataNasc}</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Data de nascimento" required error={errors.dataNasc}>
+                <input
+                  className={inputCls}
+                  style={inputStyle}
+                  type="date"
+                  value={paciente.dataNasc}
+                  onChange={(e) => setPaciente({ ...paciente, dataNasc: e.target.value })}
+                />
               </Field>
 
-              <Field label="Sexo biológico" required>
-                <select className={selectCls}
-                  value={paciente.sexo} onChange={(e) => setPaciente({ ...paciente, sexo: e.target.value })}>
-                  <option value="">Selecione</option>
-                  <option value="M">Masculino</option>
-                  <option value="F">Feminino</option>
-                </select>
-                {errors.sexo && <p className="text-red-400 text-[11.5px] mt-1">{errors.sexo}</p>}
+              <Field label="Sexo biológico" required error={errors.sexo}>
+                <div className="flex gap-2">
+                  {[
+                    { value: "M", label: "Masculino" },
+                    { value: "F", label: "Feminino" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setPaciente({ ...paciente, sexo: opt.value })}
+                      className="flex-1 py-3 rounded-2xl text-[14px] font-medium lift"
+                      style={{
+                        background: paciente.sexo === opt.value ? "var(--ink)" : "var(--surface)",
+                        color: paciente.sexo === opt.value ? "var(--on-ink)" : "var(--ink)",
+                        border: `1px solid ${paciente.sexo === opt.value ? "var(--ink)" : "var(--hair)"}`,
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </Field>
             </div>
 
-            <Field label="Nome do responsável" required>
-              <input className={inputCls} type="text" placeholder="Pai, mãe ou tutor legal"
-                value={paciente.responsavel} onChange={(e) => setPaciente({ ...paciente, responsavel: e.target.value })} />
-              {errors.responsavel && <p className="text-red-400 text-[11.5px] mt-1">{errors.responsavel}</p>}
+            <Field label="Nome do responsável" required error={errors.responsavel}>
+              <input
+                className={inputCls}
+                style={inputStyle}
+                type="text"
+                placeholder="Pai, mãe ou tutor legal"
+                value={paciente.responsavel}
+                onChange={(e) => setPaciente({ ...paciente, responsavel: e.target.value })}
+              />
             </Field>
 
-            <Field label="Etnia" required>
-              <select className={selectCls}
-                value={paciente.etnia} onChange={(e) => setPaciente({ ...paciente, etnia: e.target.value })}>
+            <Field label="Etnia" required error={errors.etnia}>
+              <select
+                className={selectCls}
+                style={inputStyle}
+                value={paciente.etnia}
+                onChange={(e) => setPaciente({ ...paciente, etnia: e.target.value })}
+              >
                 <option value="">Selecione</option>
                 {ETNIAS.map((et) => (
                   <option key={et.value} value={et.value}>{et.label}</option>
                 ))}
               </select>
-              {errors.etnia && <p className="text-red-400 text-[11.5px] mt-1">{errors.etnia}</p>}
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Estado de residência (UF)" required>
-                <select className={selectCls}
-                  value={paciente.uf} onChange={(e) => setPaciente({ ...paciente, uf: e.target.value })}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Estado de residência (UF)" required error={errors.uf}>
+                <select
+                  className={selectCls}
+                  style={inputStyle}
+                  value={paciente.uf}
+                  onChange={(e) => setPaciente({ ...paciente, uf: e.target.value })}
+                >
                   <option value="">Selecione</option>
                   {UFS_BR.map((uf) => (
                     <option key={uf} value={uf}>{uf}</option>
                   ))}
                 </select>
-                {errors.uf && <p className="text-red-400 text-[11.5px] mt-1">{errors.uf}</p>}
               </Field>
 
-              <Field label="Município de residência" required>
-                <input className={inputCls} type="text" placeholder="Cidade"
-                  value={paciente.municipio} onChange={(e) => setPaciente({ ...paciente, municipio: e.target.value })} />
-                {errors.municipio && <p className="text-red-400 text-[11.5px] mt-1">{errors.municipio}</p>}
+              <Field label="Município de residência" required error={errors.municipio}>
+                <input
+                  className={inputCls}
+                  style={inputStyle}
+                  type="text"
+                  placeholder="Cidade"
+                  value={paciente.municipio}
+                  onChange={(e) => setPaciente({ ...paciente, municipio: e.target.value })}
+                />
               </Field>
             </div>
           </Card>
@@ -404,22 +419,32 @@ export default function TriagemPage() {
 
         {/* ══ STEP 1 — DADOS DO ACOMPANHANTE ══ */}
         {step === 1 && (
-          <Card>
-            <h2 className="text-base font-semibold mb-1">Dados do acompanhante</h2>
-            <p className="text-[12.5px] text-zinc-500 mb-6">
+          <Card className="p-7">
+            <h2 className="font-display text-[22px] mb-1" style={{ color: "var(--ink)" }}>
+              Dados do acompanhante
+            </h2>
+            <p className="text-[13px] mb-6" style={{ color: "var(--muted)" }}>
               O acompanhante é quem responderá o questionário de sintomas.
-              Cada avaliação deve ser feita com um acompanhante diferente.
             </p>
 
-            <Field label="Nome completo" required>
-              <input className={inputCls} type="text" placeholder="Nome do acompanhante"
-                value={acomp.nome} onChange={(e) => setAcomp({ ...acomp, nome: e.target.value })} />
-              {errors.nomeAcomp && <p className="text-red-400 text-[11.5px] mt-1">{errors.nomeAcomp}</p>}
+            <Field label="Nome completo" required error={errors.nomeAcomp}>
+              <input
+                className={inputCls}
+                style={inputStyle}
+                type="text"
+                placeholder="Nome do acompanhante"
+                value={acomp.nome}
+                onChange={(e) => setAcomp({ ...acomp, nome: e.target.value })}
+              />
             </Field>
 
-            <Field label="Relação com o paciente" required>
-              <select className={selectCls}
-                value={acomp.relacao} onChange={(e) => setAcomp({ ...acomp, relacao: e.target.value })}>
+            <Field label="Relação com o paciente" required error={errors.relacaoAcomp}>
+              <select
+                className={selectCls}
+                style={inputStyle}
+                value={acomp.relacao}
+                onChange={(e) => setAcomp({ ...acomp, relacao: e.target.value })}
+              >
                 <option value="">Selecione</option>
                 <option>Mãe</option>
                 <option>Pai</option>
@@ -429,29 +454,48 @@ export default function TriagemPage() {
                 <option>Cuidador(a)</option>
                 <option>Outro</option>
               </select>
-              {errors.relacaoAcomp && <p className="text-red-400 text-[11.5px] mt-1">{errors.relacaoAcomp}</p>}
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Telefone">
-                <input className={inputCls} type="tel" placeholder="(00) 9 0000-0000"
-                  value={acomp.telefone} onChange={(e) => setAcomp({ ...acomp, telefone: e.target.value })} />
+                <input
+                  className={inputCls}
+                  style={inputStyle}
+                  type="tel"
+                  placeholder="(00) 9 0000-0000"
+                  value={acomp.telefone}
+                  onChange={(e) => setAcomp({ ...acomp, telefone: e.target.value })}
+                />
               </Field>
               <Field label="E-mail">
-                <input className={inputCls} type="email" placeholder="email@exemplo.com"
-                  value={acomp.email} onChange={(e) => setAcomp({ ...acomp, email: e.target.value })} />
+                <input
+                  className={inputCls}
+                  style={inputStyle}
+                  type="email"
+                  placeholder="email@exemplo.com"
+                  value={acomp.email}
+                  onChange={(e) => setAcomp({ ...acomp, email: e.target.value })}
+                />
               </Field>
             </div>
 
-            <div className="mt-2 bg-blue-500/[0.07] border border-blue-500/20 rounded-lg px-4 py-3">
-              <p className="text-[12.5px] text-blue-400">
-                <span className="font-semibold">Paciente:</span> {paciente.nome} ·{" "}
+            {/* Patient summary pill */}
+            <div
+              className="rounded-2xl px-4 py-3 mt-2"
+              style={{
+                background: "var(--paper-2)",
+                border: "1px solid var(--hair-soft)",
+              }}
+            >
+              <p className="text-[13px]" style={{ color: "var(--ink)" }}>
+                <span style={{ color: "var(--muted)" }}>Paciente: </span>
+                {paciente.nome} ·{" "}
                 {paciente.sexo === "M" ? "Masculino" : "Feminino"} ·{" "}
-                {paciente.dataNasc && new Date(paciente.dataNasc).toLocaleDateString("pt-BR")}
+                {paciente.dataNasc && new Date(paciente.dataNasc + "T00:00").toLocaleDateString("pt-BR")}
               </p>
             </div>
 
-            <p className="text-[11.5px] text-zinc-600 mt-3">
+            <p className="text-[11.5px] mt-3" style={{ color: "var(--subtle)" }}>
               Telefone e e-mail são opcionais, mas necessários para vincular o acompanhante ao registro do paciente.
             </p>
           </Card>
@@ -460,76 +504,113 @@ export default function TriagemPage() {
         {/* ══ STEP 2 — QUESTIONÁRIO ══ */}
         {step === 2 && (
           <div>
-            {/* Progresso */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[12px] text-zinc-500">{totalRespondidas} de {sintomasFiltrados.length} respondidas</span>
-                <span className="text-[12px] text-zinc-500">{progresso}%</span>
+            {/* Progress bar */}
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[12px]" style={{ color: "var(--muted)" }}>
+                  {totalRespondidas} de {sintomasFiltrados.length} respondidas
+                </span>
+                <span className="text-[12px]" style={{ color: "var(--muted)" }}>
+                  {progresso}%
+                </span>
               </div>
-              <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full transition-all duration-300"
-                  style={{ width: `${progresso}%` }} />
+              <div
+                className="h-1.5 rounded-full overflow-hidden"
+                style={{ background: "var(--hair)" }}
+              >
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${progresso}%`,
+                    background: "var(--ink)",
+                    transition: "width 0.3s ease",
+                  }}
+                />
               </div>
             </div>
 
             {errors.questionario && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 mb-4">
-                <p className="text-red-400 text-[12.5px]">{errors.questionario}</p>
+              <div
+                className="rounded-2xl px-4 py-3 mb-4 text-[13px]"
+                style={{ background: "var(--rust-soft)", color: "var(--rust)" }}
+              >
+                {errors.questionario}
               </div>
             )}
 
-            <Card className="!p-0 overflow-hidden">
-              {/* Header */}
-              <div className="px-5 py-4 border-b border-white/[0.07] bg-white/[0.02]">
-                <p className="text-[12.5px] text-zinc-400">
+            <Card className="overflow-hidden !p-0">
+              {/* Card header */}
+              <div
+                className="px-6 py-4"
+                style={{
+                  background: "var(--paper-2)",
+                  borderBottom: "1px solid var(--hair-soft)",
+                }}
+              >
+                <p className="text-[13px]" style={{ color: "var(--muted)" }}>
                   Responda com base no comportamento habitual de{" "}
-                  <span className="text-[#edead4] font-medium">{paciente.nome}</span>.
-                  Acompanhante: <span className="text-[#edead4] font-medium">{acomp.nome}</span>.
+                  <span style={{ color: "var(--ink)", fontWeight: 500 }}>{paciente.nome}</span>.
+                  Acompanhante:{" "}
+                  <span style={{ color: "var(--ink)", fontWeight: 500 }}>{acomp.nome}</span>.
                 </p>
               </div>
 
-              {/* Legenda */}
-              <div className="px-5 py-3 border-b border-white/[0.07] flex items-center gap-4 flex-wrap">
-                <span className="text-[10.5px] text-zinc-600 uppercase tracking-wider font-semibold">Legenda:</span>
-                <span className="inline-flex items-center gap-1.5 text-[11.5px] text-emerald-400">
-                  <span className="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-[9px]">✓</span>
-                  Presente
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-[11.5px] text-zinc-500">
-                  <span className="w-3 h-3 rounded bg-white/5 border border-white/10 flex items-center justify-center text-[9px]">✕</span>
-                  Ausente
-                </span>
-              </div>
-
-              {/* Sintomas */}
+              {/* Symptom rows */}
               <div>
                 {sintomasFiltrados.map((s, idx) => {
                   const resp = respostas[s.id];
                   const peso = paciente.sexo === "M" ? s.pesoM : s.pesoF;
                   return (
-                    <div key={s.id}
-                      className={`flex items-center justify-between px-5 py-4 border-b border-white/[0.07] last:border-0 transition-colors
-                        ${resp === 1 ? "bg-emerald-500/[0.04]" : resp === 0 ? "bg-white/[0.01]" : "hover:bg-white/[0.02]"}`}>
-                      <div className="flex-1 pr-4">
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between px-6 py-4"
+                      style={{
+                        borderBottom: idx < sintomasFiltrados.length - 1 ? "1px solid var(--hair-soft)" : "none",
+                        background: resp === 1
+                          ? "var(--paper-2)"
+                          : "transparent",
+                      }}
+                    >
+                      <div className="flex-1 pr-6">
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-700 font-mono w-4">{String(idx + 1).padStart(2, "0")}</span>
-                          <span className="text-sm text-[#edead4]">{s.label}</span>
+                          <span
+                            className="font-mono text-[10px] w-5"
+                            style={{ color: "var(--subtle)" }}
+                          >
+                            {String(idx + 1).padStart(2, "0")}
+                          </span>
+                          <span className="text-[14px]" style={{ color: "var(--ink)" }}>
+                            {s.label}
+                          </span>
                         </div>
-                        <span className="text-[10.5px] text-zinc-600 ml-6">Peso: {peso?.toFixed(2)}</span>
+                        <span className="text-[10.5px] ml-7" style={{ color: "var(--subtle)" }}>
+                          Peso: {peso?.toFixed(2)}
+                        </span>
                       </div>
+
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <button onClick={() => setResposta(s.id, 0)}
-                          className={`w-10 h-9 rounded-lg border text-[12px] font-medium transition-all
-                            ${resp === 0
-                              ? "bg-zinc-700 border-zinc-600 text-white"
-                              : "bg-white/[0.03] border-white/[0.07] text-zinc-600 hover:border-white/15 hover:text-[#edead4]"}`}>
+                        {/* Não */}
+                        <button
+                          onClick={() => setResposta(s.id, 0)}
+                          className="w-14 h-9 rounded-xl text-[12px] font-medium lift"
+                          style={{
+                            background: resp === 0 ? "var(--ink)" : "transparent",
+                            color: resp === 0 ? "var(--on-ink)" : "var(--muted)",
+                            border: `1px solid ${resp === 0 ? "var(--ink)" : "var(--hair)"}`,
+                          }}
+                        >
                           Não
                         </button>
-                        <button onClick={() => setResposta(s.id, 1)}
-                          className={`w-10 h-9 rounded-lg border text-[12px] font-medium transition-all
-                            ${resp === 1
-                              ? "bg-emerald-600 border-emerald-500 text-white"
-                              : "bg-white/[0.03] border-white/[0.07] text-zinc-600 hover:border-emerald-500/30 hover:text-emerald-400"}`}>
+                        {/* Sim */}
+                        <button
+                          onClick={() => setResposta(s.id, 1)}
+                          className="w-14 h-9 rounded-xl text-[12px] font-medium lift"
+                          style={{
+                            background: resp === 1 ? "var(--ink)" : "transparent",
+                            color: resp === 1 ? "var(--on-ink)" : "var(--muted)",
+                            border: `1px solid ${resp === 1 ? "var(--ink)" : "var(--hair)"}`,
+                          }}
+                        >
                           Sim
                         </button>
                       </div>
@@ -546,37 +627,86 @@ export default function TriagemPage() {
           <div className="space-y-4">
 
             {/* Resumo paciente */}
-            <Card>
-              <h3 className="text-sm font-semibold mb-3 text-zinc-400 uppercase tracking-wider text-[11px]">Paciente</h3>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                <div><span className="text-[11px] text-zinc-600">Nome</span><p className="text-sm">{paciente.nome}</p></div>
-                <div><span className="text-[11px] text-zinc-600">Sexo</span><p className="text-sm">{paciente.sexo === "M" ? "Masculino" : "Feminino"}</p></div>
-                <div><span className="text-[11px] text-zinc-600">Nascimento</span><p className="text-sm">{new Date(paciente.dataNasc).toLocaleDateString("pt-BR")}</p></div>
-                <div><span className="text-[11px] text-zinc-600">Responsável</span><p className="text-sm">{paciente.responsavel}</p></div>
-                <div><span className="text-[11px] text-zinc-600">Etnia</span><p className="text-sm">{paciente.etnia}</p></div>
-                <div><span className="text-[11px] text-zinc-600">UF / Município</span><p className="text-sm">{paciente.uf} · {paciente.municipio}</p></div>
+            <Card className="p-6">
+              <h3
+                className="text-[10.5px] font-semibold uppercase tracking-[0.14em] mb-4"
+                style={{ color: "var(--muted)" }}
+              >
+                Paciente
+              </h3>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                {[
+                  ["Nome",        paciente.nome],
+                  ["Sexo",        paciente.sexo === "M" ? "Masculino" : "Feminino"],
+                  ["Nascimento",  new Date(paciente.dataNasc + "T00:00").toLocaleDateString("pt-BR")],
+                  ["Responsável", paciente.responsavel],
+                  ["Etnia",       paciente.etnia],
+                  ["UF / Município", `${paciente.uf} · ${paciente.municipio}`],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <span className="text-[11px] block" style={{ color: "var(--subtle)" }}>{k}</span>
+                    <span className="text-[13px]" style={{ color: "var(--ink)" }}>{v}</span>
+                  </div>
+                ))}
               </div>
             </Card>
 
             {/* Resumo acompanhante */}
-            <Card>
-              <h3 className="text-sm font-semibold mb-3 text-zinc-400 uppercase tracking-wider text-[11px]">Acompanhante</h3>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                <div><span className="text-[11px] text-zinc-600">Nome</span><p className="text-sm">{acomp.nome}</p></div>
-                <div><span className="text-[11px] text-zinc-600">Relação</span><p className="text-sm">{acomp.relacao}</p></div>
-                {acomp.telefone && <div><span className="text-[11px] text-zinc-600">Telefone</span><p className="text-sm">{acomp.telefone}</p></div>}
-                {acomp.email    && <div><span className="text-[11px] text-zinc-600">E-mail</span><p className="text-sm">{acomp.email}</p></div>}
+            <Card className="p-6">
+              <h3
+                className="text-[10.5px] font-semibold uppercase tracking-[0.14em] mb-4"
+                style={{ color: "var(--muted)" }}
+              >
+                Acompanhante
+              </h3>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                <div>
+                  <span className="text-[11px] block" style={{ color: "var(--subtle)" }}>Nome</span>
+                  <span className="text-[13px]" style={{ color: "var(--ink)" }}>{acomp.nome}</span>
+                </div>
+                <div>
+                  <span className="text-[11px] block" style={{ color: "var(--subtle)" }}>Relação</span>
+                  <span className="text-[13px]" style={{ color: "var(--ink)" }}>{acomp.relacao}</span>
+                </div>
+                {acomp.telefone && (
+                  <div>
+                    <span className="text-[11px] block" style={{ color: "var(--subtle)" }}>Telefone</span>
+                    <span className="text-[13px]" style={{ color: "var(--ink)" }}>{acomp.telefone}</span>
+                  </div>
+                )}
+                {acomp.email && (
+                  <div>
+                    <span className="text-[11px] block" style={{ color: "var(--subtle)" }}>E-mail</span>
+                    <span className="text-[13px]" style={{ color: "var(--ink)" }}>{acomp.email}</span>
+                  </div>
+                )}
               </div>
             </Card>
 
-            {/* Resumo respostas */}
-            <Card>
-              <h3 className="text-sm font-semibold mb-3 text-zinc-400 uppercase tracking-wider text-[11px]">Sintomas informados</h3>
-              <div className="space-y-2">
-                {sintomasFiltrados.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between py-1 border-b border-white/[0.05] last:border-0">
-                    <span className="text-[13px] text-zinc-400">{s.label}</span>
-                    <span className={`text-[12px] font-medium ${respostas[s.id] === 1 ? "text-emerald-400" : "text-zinc-600"}`}>
+            {/* Resumo sintomas */}
+            <Card className="p-6">
+              <h3
+                className="text-[10.5px] font-semibold uppercase tracking-[0.14em] mb-4"
+                style={{ color: "var(--muted)" }}
+              >
+                Sintomas informados
+              </h3>
+              <div className="space-y-0">
+                {sintomasFiltrados.map((s, i) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between py-2"
+                    style={{
+                      borderBottom: i < sintomasFiltrados.length - 1 ? "1px solid var(--hair-soft)" : "none",
+                    }}
+                  >
+                    <span className="text-[13px]" style={{ color: "var(--muted)" }}>{s.label}</span>
+                    <span
+                      className="text-[12px] font-medium"
+                      style={{
+                        color: respostas[s.id] === 1 ? "var(--ink)" : "var(--subtle)",
+                      }}
+                    >
                       {respostas[s.id] === 1 ? "Presente" : "Ausente"}
                     </span>
                   </div>
@@ -584,58 +714,80 @@ export default function TriagemPage() {
               </div>
             </Card>
 
-            {/* Preview do score */}
-            <Card className="bg-blue-500/[0.06] border-blue-500/20">
-              <div className="flex items-center justify-between">
+            {/* Score preview */}
+            <Card
+              className="p-7"
+              style={{ background: "var(--ink)", border: "none" }}
+            >
+              <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-[11px] text-blue-400/70 uppercase tracking-wider font-semibold mb-1">Score calculado</p>
-                  <p className="text-3xl font-semibold text-blue-400">{calcularScore().toFixed(4)}</p>
-                  <p className="text-[11.5px] text-zinc-500 mt-1">Limiar de encaminhamento: {getLimiar()}</p>
+                  <p
+                    className="text-[10.5px] uppercase tracking-[0.14em] mb-2"
+                    style={{ color: "var(--on-ink-55)" }}
+                  >
+                    Score calculado
+                  </p>
+                  <div
+                    className="font-display text-[64px] leading-none num-tabular"
+                    style={{ color: "var(--on-ink)" }}
+                  >
+                    {calcularScore().toFixed(4)}
+                  </div>
+                  <p className="text-[12px] mt-2" style={{ color: "var(--on-ink-55)" }}>
+                    Limiar de encaminhamento: {getLimiar()}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">Resultado preliminar</p>
+                  <p
+                    className="text-[10.5px] uppercase tracking-[0.14em] mb-2"
+                    style={{ color: "var(--on-ink-55)" }}
+                  >
+                    Resultado preliminar
+                  </p>
                   {calcularScore() >= getLimiar() ? (
-                    <span className="inline-block px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-400 text-[12.5px] font-medium">
-                      Encaminhar para teste genético
-                    </span>
+                    <Pill tone="neutral">Encaminhar para teste</Pill>
                   ) : (
-                    <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[12.5px] font-medium">
-                      Baixo risco — acompanhamento
-                    </span>
+                    <Pill tone="neutral">Baixo risco</Pill>
                   )}
                 </div>
               </div>
             </Card>
 
-            {/* Erro de submissão */}
+            {/* Submit error */}
             {submitError && (
-              <div className="bg-red-500/10 border border-red-500/25 rounded-lg px-4 py-3">
-                <p className="text-red-400 text-[13px]">{submitError}</p>
+              <div
+                className="rounded-2xl px-4 py-3 text-[13px]"
+                style={{ background: "var(--rust-soft)", color: "var(--rust)" }}
+              >
+                {submitError}
               </div>
             )}
-
           </div>
         )}
 
-        {/* ── NAVEGAÇÃO ── */}
+        {/* ── Navigation ── */}
         <div className="flex items-center justify-between mt-6">
           <div>
-            {step > 0 && !submitting && (
-              <BtnOutline onClick={voltar}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="15 18 9 12 15 6"/>
-                </svg>
-                Voltar
-              </BtnOutline>
+            {step === 0 ? (
+              <BtnGhost onClick={() => router.push("/dashboard")}>
+                {Icons.chevronLeft}
+                Cancelar
+              </BtnGhost>
+            ) : (
+              !submitting && (
+                <BtnGhost onClick={voltar}>
+                  {Icons.chevronLeft}
+                  Voltar
+                </BtnGhost>
+              )
             )}
           </div>
+
           <div>
             {step < 3 && (
               <BtnPrimary onClick={avancar}>
                 Continuar
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="9 18 15 12 9 6"/>
-                </svg>
+                {Icons.chevronRight}
               </BtnPrimary>
             )}
             {step === 3 && (
@@ -643,17 +795,15 @@ export default function TriagemPage() {
                 {submitting ? (
                   <>
                     <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                     </svg>
                     Enviando…
                   </>
                 ) : (
                   <>
                     Gerar resultado
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
+                    {Icons.check}
                   </>
                 )}
               </BtnPrimary>
@@ -662,6 +812,6 @@ export default function TriagemPage() {
         </div>
 
       </div>
-    </div>
+    </AppShell>
   );
 }
