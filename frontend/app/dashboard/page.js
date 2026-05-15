@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { api } from "../lib/apiClient";
+import { isAuthenticated, getSessaoId, clearAuth } from "../lib/auth";
 
 // ── ÍCONES SVG inline ──────────────────────────────────────────────────────
 const Icon = {
@@ -231,6 +233,53 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQ, setSearchQ] = useState("");
 
+  // API data state
+  const [patients, setPatients]               = useState([]);
+  const [patientsLoading, setPatientsLoading] = useState(false);
+  const [totalPatients, setTotalPatients]     = useState(null);
+
+  // Auth guard — redirect to login if no token
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.replace("/");
+    }
+  }, [router]);
+
+  // Load patient list when the Pacientes section is activated
+  useEffect(() => {
+    if (page !== "pacientes") return;
+    setPatientsLoading(true);
+    api.listPatients({ limit: 50 })
+      .then((res) => {
+        setPatients(res?.items ?? []);
+        setTotalPatients(res?.total ?? 0);
+      })
+      .catch(() => {
+        setPatients([]);
+      })
+      .finally(() => setPatientsLoading(false));
+  }, [page]);
+
+  // Load total patient count on mount (for the stat card)
+  useEffect(() => {
+    if (!isAuthenticated()) return;
+    api.listPatients({ limit: 1 })
+      .then((res) => setTotalPatients(res?.total ?? null))
+      .catch(() => {});
+  }, []);
+
+  async function handleLogout() {
+    const sessaoId = getSessaoId();
+    try {
+      if (sessaoId !== null) await api.logout(sessaoId);
+    } catch {
+      // proceed regardless of API error
+    } finally {
+      clearAuth();
+      router.push("/");
+    }
+  }
+
   const pageTitles = {
     dashboard:          ["Dashboard",                  "Painel Médico"],
     agenda:             ["Agenda",                     "Módulo Clínico"],
@@ -336,7 +385,7 @@ export default function DashboardPage() {
               <div className="text-[11px] text-zinc-600">Clínico Geral</div>
             </div>
           </div>
-          <button onClick={() => router.push("/")}
+          <button onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-white/[0.07] text-zinc-500 hover:text-red-400 hover:border-red-500/25 text-[12.5px] transition-all">
             {Icon.logout} Sair do sistema
           </button>
@@ -383,7 +432,7 @@ export default function DashboardPage() {
                 <StatCard label="Agendados hoje"   value="—" sub="Sem registros"  accent="blue" />
                 <StatCard label="Confirmados"       value="—" sub="Sem registros"  accent="green" />
                 <StatCard label="Desmarcados"       value="—" sub="Sem registros"  accent="red" />
-                <StatCard label="Total de pacientes" value="—" sub="Sem cadastros" />
+                <StatCard label="Total de pacientes" value={totalPatients !== null ? String(totalPatients) : "—"} sub={totalPatients !== null ? "pacientes cadastrados" : "Sem cadastros"} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-5">
@@ -456,12 +505,37 @@ export default function DashboardPage() {
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-600">{Icon.search}</span>
                   <input value={searchQ} onChange={(e) => setSearchQ(e.target.value)}
                     className={`${inputCls} pl-9`}
-                    placeholder="Buscar por nome, CPF ou telefone…" />
+                    placeholder="Buscar por nome…" />
                 </div>
-                <BtnPrimary onClick={() => setModalPaciente(true)}>{Icon.plus} Novo paciente</BtnPrimary>
+                <BtnPrimary onClick={() => router.push("/triagem")}>{Icon.plus} Nova triagem</BtnPrimary>
                 <BtnOutline>{Icon.chevronDown} Exportar</BtnOutline>
               </div>
-              <TableWrap headers={["#","Paciente","Data de nascimento","CPF","Celular","E-mail","Último atend.",""]} empty />
+              {patientsLoading ? (
+                <div className="text-center py-14 text-zinc-600">
+                  <p className="text-sm">Carregando pacientes…</p>
+                </div>
+              ) : (
+                <TableWrap
+                  headers={["#","Paciente","Sexo","Data de nascimento",""]}
+                  empty={patients.filter((p) =>
+                    !searchQ || p.nome.toLowerCase().includes(searchQ.toLowerCase())
+                  ).length === 0}
+                >
+                  {patients
+                    .filter((p) => !searchQ || p.nome.toLowerCase().includes(searchQ.toLowerCase()))
+                    .map((p) => (
+                      <tr key={p.id} className="border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 text-[12.5px] text-zinc-500 font-mono">{p.id}</td>
+                        <td className="px-4 py-3 text-[13px] text-[#edead4]">{p.nome}</td>
+                        <td className="px-4 py-3 text-[12.5px] text-zinc-400">{p.sexo === "M" ? "Masculino" : p.sexo === "F" ? "Feminino" : p.sexo ?? "—"}</td>
+                        <td className="px-4 py-3 text-[12.5px] text-zinc-400">{p.data_nascimento ? new Date(p.data_nascimento).toLocaleDateString("pt-BR") : "—"}</td>
+                        <td className="px-4 py-3">
+                          <button className="text-[12px] text-blue-400 hover:text-blue-300 transition-colors">Ver histórico</button>
+                        </td>
+                      </tr>
+                    ))}
+                </TableWrap>
+              )}
             </div>
           )}
 

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { api } from "../lib/apiClient";
+import { getSessaoId } from "../lib/auth";
+import { SINTOMA_ID_MAP } from "../lib/sintomaIds";
 
 // ── SINTOMAS COM PESOS POR SEXO ───────────────────────────────────────────
 const SINTOMAS = [
@@ -19,12 +22,24 @@ const SINTOMAS = [
   { id: "agressividade",              label: "Agressividade",                pesoM: 0.01, pesoF: 0.02 },
 ];
 
-// Limiares validados pelo artigo
 const LIMIAR_M = 0.56;
 const LIMIAR_F = 0.55;
 
-// ── STEPS ─────────────────────────────────────────────────────────────────
 const STEPS = ["Paciente", "Acompanhante", "Questionário", "Revisão"];
+
+const UFS_BR = [
+  "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",
+  "PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
+];
+
+const ETNIAS = [
+  { value: "BRANCA",        label: "Branca" },
+  { value: "PARDA",         label: "Parda" },
+  { value: "PRETA",         label: "Preta" },
+  { value: "AMARELA",       label: "Amarela" },
+  { value: "INDIGENA",      label: "Indígena" },
+  { value: "NAO_DECLARADO", label: "Não declarado" },
+];
 
 // ── COMPONENTES UTILITÁRIOS ───────────────────────────────────────────────
 function StepIndicator({ current }) {
@@ -102,9 +117,10 @@ export default function TriagemPage() {
   const [step, setStep]     = useState(0);
   const [errors, setErrors] = useState({});
 
-  // Dados do paciente
+  // Dados do paciente — inclui campos obrigatórios para o backend
   const [paciente, setPaciente] = useState({
     nome: "", dataNasc: "", sexo: "", responsavel: "",
+    etnia: "", uf: "", municipio: "",
   });
 
   // Dados do acompanhante
@@ -116,6 +132,10 @@ export default function TriagemPage() {
   const [respostas, setRespostas] = useState(
     Object.fromEntries(SINTOMAS.map((s) => [s.id, null]))
   );
+
+  // Estado de submissão
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   // ── Sintomas filtrados pelo sexo ──
   const sintomasFiltrados = SINTOMAS.filter((s) => {
@@ -129,8 +149,8 @@ export default function TriagemPage() {
     const isMasc = paciente.sexo === "M";
     let score = 0;
     sintomasFiltrados.forEach((s) => {
-      const resp  = respostas[s.id];
-      const peso  = isMasc ? s.pesoM : s.pesoF;
+      const resp = respostas[s.id];
+      const peso = isMasc ? s.pesoM : s.pesoF;
       if (resp === 1 && peso) score += peso;
     });
     return parseFloat(score.toFixed(4));
@@ -143,10 +163,13 @@ export default function TriagemPage() {
   // ── Validações ──
   function validarStep0() {
     const e = {};
-    if (!paciente.nome.trim())     e.nome      = "Nome é obrigatório.";
-    if (!paciente.dataNasc)        e.dataNasc  = "Data de nascimento é obrigatória.";
-    if (!paciente.sexo)            e.sexo      = "Sexo é obrigatório.";
+    if (!paciente.nome.trim())       e.nome       = "Nome é obrigatório.";
+    if (!paciente.dataNasc)          e.dataNasc   = "Data de nascimento é obrigatória.";
+    if (!paciente.sexo)              e.sexo       = "Sexo é obrigatório.";
     if (!paciente.responsavel.trim()) e.responsavel = "Responsável é obrigatório.";
+    if (!paciente.etnia)             e.etnia      = "Etnia é obrigatória.";
+    if (!paciente.uf)                e.uf         = "Estado de residência é obrigatório.";
+    if (!paciente.municipio.trim())  e.municipio  = "Município é obrigatório.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -180,30 +203,95 @@ export default function TriagemPage() {
 
   function voltar() {
     setErrors({});
+    setSubmitError("");
     setStep((s) => s - 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // ── Submissão final ──
-  function submeter() {
-    const score   = calcularScore();
-    const limiar  = getLimiar();
-    const result  = score >= limiar ? "encaminhar" : "baixo_risco";
+  // ── Submissão final — chama a API ──
+  async function submeter() {
+    setSubmitting(true);
+    setSubmitError("");
 
-    // Monta objeto com todos os dados para passar à página de resultado
-    const dados = {
-      paciente,
-      acompanhante: acomp,
-      respostas,
-      score,
-      limiar,
-      resultado: result,
-      data: new Date().toISOString(),
-    };
+    try {
+      const sessaoId = getSessaoId();
 
-    // Salva no sessionStorage para a página de resultado acessar
-    sessionStorage.setItem("triagem_resultado", JSON.stringify(dados));
-    router.push("/resultado");
+      // 1. Registrar o paciente
+      const patientPayload = {
+        nome:                  paciente.nome,
+        data_nascimento:       paciente.dataNasc,
+        sexo:                  paciente.sexo,
+        etnia:                 paciente.etnia,
+        uf_nascimento:         paciente.uf,   // padrão: mesmo estado de residência
+        municipio_residencia:  paciente.municipio,
+        uf_residencia:         paciente.uf,
+        // campos opcionais com defaults
+        prematuro:             false,
+        tem_diagnostico_autismo: false,
+        tem_diagnostico_tdah:    false,
+        // acompanhante (somente se telefone e e-mail preenchidos)
+        ...(acomp.telefone && acomp.email
+          ? {
+              acompanhante: {
+                nome:     acomp.nome,
+                telefone: acomp.telefone,
+                email:    acomp.email,
+              },
+            }
+          : {}),
+      };
+
+      await api.createPatient(patientPayload);
+
+      // 2. Recuperar o ID inteiro do paciente recém-criado via listagem por nome
+      // O backend retorna UUID no POST mas o endpoint de avaliações precisa do ID serial.
+      const listResult = await api.listPatients({ nome: paciente.nome, limit: 10 });
+      const found = listResult?.items?.find((p) =>
+        p.nome.toLowerCase().startsWith(paciente.nome.split(" ")[0].toLowerCase())
+      );
+      if (!found) {
+        throw new Error("Paciente registrado, mas não foi possível recuperar seu ID. Tente novamente.");
+      }
+
+      // 3. Submeter a anamnese
+      const respostasPayload = sintomasFiltrados.map((s) => ({
+        sintoma_id: SINTOMA_ID_MAP[s.id],
+        presente:   respostas[s.id] === 1,
+        observacao: "",
+      }));
+
+      const avalResult = await api.submitAnamnesis({
+        paciente_id:           found.id,
+        sessao_id:             sessaoId,
+        observacoes:           "",
+        diagnostico_previo_fxs: false,
+        respostas:             respostasPayload,
+      });
+
+      // 4. Salvar resultado e navegar para a página de resultado
+      const scoreLocal = calcularScore();
+      const limiarLocal = getLimiar();
+
+      const dados = {
+        paciente,
+        acompanhante:  acomp,
+        respostas,
+        score:         avalResult?.score_final    ?? scoreLocal,
+        limiar:        avalResult?.limiar_usado   ?? limiarLocal,
+        resultado:     avalResult?.recomenda_exame
+          ? "encaminhar"
+          : "baixo_risco",
+        data:          new Date().toISOString(),
+        avaliacao_id:  avalResult?.avaliacao_id,
+      };
+
+      sessionStorage.setItem("triagem_resultado", JSON.stringify(dados));
+      router.push("/resultado");
+
+    } catch (err) {
+      setSubmitError(err.message || "Erro ao enviar triagem. Verifique sua conexão e tente novamente.");
+      setSubmitting(false);
+    }
   }
 
   // ── Resposta do questionário ──
@@ -212,8 +300,8 @@ export default function TriagemPage() {
     if (errors.questionario) setErrors({});
   }
 
-  const totalRespondidas  = sintomasFiltrados.filter((s) => respostas[s.id] !== null).length;
-  const progresso         = Math.round((totalRespondidas / sintomasFiltrados.length) * 100);
+  const totalRespondidas = sintomasFiltrados.filter((s) => respostas[s.id] !== null).length;
+  const progresso        = Math.round((totalRespondidas / sintomasFiltrados.length) * 100);
 
   return (
     <div className="min-h-screen bg-[#0d0d0c] text-[#edead4]">
@@ -283,6 +371,36 @@ export default function TriagemPage() {
                 value={paciente.responsavel} onChange={(e) => setPaciente({ ...paciente, responsavel: e.target.value })} />
               {errors.responsavel && <p className="text-red-400 text-[11.5px] mt-1">{errors.responsavel}</p>}
             </Field>
+
+            <Field label="Etnia" required>
+              <select className={selectCls}
+                value={paciente.etnia} onChange={(e) => setPaciente({ ...paciente, etnia: e.target.value })}>
+                <option value="">Selecione</option>
+                {ETNIAS.map((et) => (
+                  <option key={et.value} value={et.value}>{et.label}</option>
+                ))}
+              </select>
+              {errors.etnia && <p className="text-red-400 text-[11.5px] mt-1">{errors.etnia}</p>}
+            </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Estado de residência (UF)" required>
+                <select className={selectCls}
+                  value={paciente.uf} onChange={(e) => setPaciente({ ...paciente, uf: e.target.value })}>
+                  <option value="">Selecione</option>
+                  {UFS_BR.map((uf) => (
+                    <option key={uf} value={uf}>{uf}</option>
+                  ))}
+                </select>
+                {errors.uf && <p className="text-red-400 text-[11.5px] mt-1">{errors.uf}</p>}
+              </Field>
+
+              <Field label="Município de residência" required>
+                <input className={inputCls} type="text" placeholder="Cidade"
+                  value={paciente.municipio} onChange={(e) => setPaciente({ ...paciente, municipio: e.target.value })} />
+                {errors.municipio && <p className="text-red-400 text-[11.5px] mt-1">{errors.municipio}</p>}
+              </Field>
+            </div>
           </Card>
         )}
 
@@ -327,7 +445,6 @@ export default function TriagemPage() {
               </Field>
             </div>
 
-            {/* Aviso sobre paciente selecionado */}
             <div className="mt-2 bg-blue-500/[0.07] border border-blue-500/20 rounded-lg px-4 py-3">
               <p className="text-[12.5px] text-blue-400">
                 <span className="font-semibold">Paciente:</span> {paciente.nome} ·{" "}
@@ -335,6 +452,10 @@ export default function TriagemPage() {
                 {paciente.dataNasc && new Date(paciente.dataNasc).toLocaleDateString("pt-BR")}
               </p>
             </div>
+
+            <p className="text-[11.5px] text-zinc-600 mt-3">
+              Telefone e e-mail são opcionais, mas necessários para vincular o acompanhante ao registro do paciente.
+            </p>
           </Card>
         )}
 
@@ -385,8 +506,8 @@ export default function TriagemPage() {
               {/* Sintomas */}
               <div>
                 {sintomasFiltrados.map((s, idx) => {
-                  const resp   = respostas[s.id];
-                  const peso   = paciente.sexo === "M" ? s.pesoM : s.pesoF;
+                  const resp = respostas[s.id];
+                  const peso = paciente.sexo === "M" ? s.pesoM : s.pesoF;
                   return (
                     <div key={s.id}
                       className={`flex items-center justify-between px-5 py-4 border-b border-white/[0.07] last:border-0 transition-colors
@@ -399,7 +520,6 @@ export default function TriagemPage() {
                         <span className="text-[10.5px] text-zinc-600 ml-6">Peso: {peso?.toFixed(2)}</span>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {/* Ausente */}
                         <button onClick={() => setResposta(s.id, 0)}
                           className={`w-10 h-9 rounded-lg border text-[12px] font-medium transition-all
                             ${resp === 0
@@ -407,7 +527,6 @@ export default function TriagemPage() {
                               : "bg-white/[0.03] border-white/[0.07] text-zinc-600 hover:border-white/15 hover:text-[#edead4]"}`}>
                           Não
                         </button>
-                        {/* Presente */}
                         <button onClick={() => setResposta(s.id, 1)}
                           className={`w-10 h-9 rounded-lg border text-[12px] font-medium transition-all
                             ${resp === 1
@@ -436,6 +555,8 @@ export default function TriagemPage() {
                 <div><span className="text-[11px] text-zinc-600">Sexo</span><p className="text-sm">{paciente.sexo === "M" ? "Masculino" : "Feminino"}</p></div>
                 <div><span className="text-[11px] text-zinc-600">Nascimento</span><p className="text-sm">{new Date(paciente.dataNasc).toLocaleDateString("pt-BR")}</p></div>
                 <div><span className="text-[11px] text-zinc-600">Responsável</span><p className="text-sm">{paciente.responsavel}</p></div>
+                <div><span className="text-[11px] text-zinc-600">Etnia</span><p className="text-sm">{paciente.etnia}</p></div>
+                <div><span className="text-[11px] text-zinc-600">UF / Município</span><p className="text-sm">{paciente.uf} · {paciente.municipio}</p></div>
               </div>
             </Card>
 
@@ -473,7 +594,7 @@ export default function TriagemPage() {
                   <p className="text-3xl font-semibold text-blue-400">{calcularScore().toFixed(4)}</p>
                   <p className="text-[11.5px] text-zinc-500 mt-1">Limiar de encaminhamento: {getLimiar()}</p>
                 </div>
-                <div className={`text-right`}>
+                <div className="text-right">
                   <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-1">Resultado preliminar</p>
                   {calcularScore() >= getLimiar() ? (
                     <span className="inline-block px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-400 text-[12.5px] font-medium">
@@ -488,13 +609,20 @@ export default function TriagemPage() {
               </div>
             </Card>
 
+            {/* Erro de submissão */}
+            {submitError && (
+              <div className="bg-red-500/10 border border-red-500/25 rounded-lg px-4 py-3">
+                <p className="text-red-400 text-[13px]">{submitError}</p>
+              </div>
+            )}
+
           </div>
         )}
 
         {/* ── NAVEGAÇÃO ── */}
         <div className="flex items-center justify-between mt-6">
           <div>
-            {step > 0 && (
+            {step > 0 && !submitting && (
               <BtnOutline onClick={voltar}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="15 18 9 12 15 6"/>
@@ -513,11 +641,23 @@ export default function TriagemPage() {
               </BtnPrimary>
             )}
             {step === 3 && (
-              <BtnPrimary onClick={submeter}>
-                Gerar resultado
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
+              <BtnPrimary onClick={submeter} disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    Enviando…
+                  </>
+                ) : (
+                  <>
+                    Gerar resultado
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </>
+                )}
               </BtnPrimary>
             )}
           </div>
