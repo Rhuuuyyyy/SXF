@@ -48,11 +48,16 @@ class PatientCreateRequest(BaseModel):
 
 
 class PatientResponse(BaseModel):
-    """LGPD-aware response: PII is masked."""
+    """LGPD-aware response: PII is masked.
+
+    db_id is the physical BIGSERIAL PK exposed for immediate use in child
+    endpoints (e.g. POST /avaliacoes) without requiring a second GET call.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     id: UUID
+    db_id: int = Field(description="ID serial (BIGSERIAL) do paciente no banco de dados")
     nome_masked: str = Field(description="Nome com últimas letras mascaradas")
     sexo: str
     etnia: str

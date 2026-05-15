@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { api } from "./lib/apiClient";
+import { saveAuth } from "./lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,7 +13,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault();
     setError("");
 
@@ -21,16 +23,15 @@ export default function LoginPage() {
     }
 
     setLoading(true);
-
-    // Simulação de autenticação — substituir por chamada real à API
-    setTimeout(() => {
+    try {
+      const data = await api.login(email, password);
+      saveAuth(data);
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err.message || "Credenciais inválidas. Verifique e tente novamente.");
+    } finally {
       setLoading(false);
-      if (password === "1234") {
-        router.push("/dashboard");
-      } else {
-        setError("Credenciais inválidas. Verifique e tente novamente.");
-      }
-    }, 1100);
+    }
   }
 
   return (

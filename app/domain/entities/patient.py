@@ -46,6 +46,9 @@ class Patient(BaseModel):
     )
 
     id: UUID = Field(default_factory=uuid4)
+    # db_id is populated by the repository after INSERT (RETURNING id).
+    # It carries the physical BIGSERIAL PK, required by child FK tables (avaliacoes).
+    db_id: int | None = Field(default=None, exclude=True)
     cpf: CPFAnnotated | None = None
     full_name: str = Field(min_length=2, max_length=120)
     birth_date: date

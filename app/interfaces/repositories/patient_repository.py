@@ -1,4 +1,11 @@
-"""Concrete adapter: persists Patient via the 'pacientes' DB view."""
+"""Concrete adapter: persists Patient via the 'pacientes' DB view.
+
+Column naming contract with the view / INSTEAD OF INSERT trigger:
+  - INSERT uses 'uuid' for the domain UUID (patient.id).
+  - 'RETURNING id' returns the physical BIGSERIAL PK (populated as patient.db_id).
+  - SELECT queries use 'id' (BIGSERIAL) for JOINs with child tables and
+    'uuid' for domain-identity lookups.
+"""
 from typing import cast
 from uuid import UUID
 
@@ -14,28 +21,37 @@ class PatientRepository:
         self._session = session
 
     async def add(self, patient: Patient) -> Patient:
-        await self._session.execute(
+        """Persist a new patient and return the entity with db_id populated.
+
+        Uses 'RETURNING id' so a second SELECT is not needed.
+        The INSTEAD OF INSERT trigger on the 'pacientes' view:
+          1. Receives NEW.uuid as the domain UUID.
+          2. Inserts into tb_pacientes with PGP-encrypted nome.
+          3. Returns the auto-generated BIGSERIAL id.
+        """
+        result = await self._session.execute(
             text(
                 """
                 INSERT INTO pacientes (
-                    id, nome, cpf_hash, data_nascimento, sexo,
+                    uuid, nome, cpf_hash, data_nascimento, sexo,
                     etnia, uf_nascimento, municipio_residencia,
                     uf_residencia, prematuro, idade_gestacional_semanas, peso_nascimento_gramas,
                     escolaridade, tem_diagnostico_autismo, tem_diagnostico_tdah,
                     outras_comorbidades, medicamentos_uso, acompanhante_id, grau_parentesco,
                     diagnostico_confirmado_fxs, criado_por, criado_em
                 ) VALUES (
-                    :id, :nome, :cpf_hash, :data_nascimento, :sexo,
+                    :uuid, :nome, :cpf_hash, :data_nascimento, :sexo,
                     :etnia, :uf_nascimento, :municipio_residencia,
                     :uf_residencia, :prematuro, :idade_gestacional_semanas, :peso_nascimento_gramas,
                     :escolaridade, :tem_diagnostico_autismo, :tem_diagnostico_tdah,
                     :outras_comorbidades, :medicamentos_uso, :acompanhante_id, :grau_parentesco,
                     :diagnostico_confirmado_fxs, :criado_por, :criado_em
                 )
+                RETURNING id
                 """
             ),
             {
-                "id": str(patient.id),
+                "uuid": str(patient.id),
                 "nome": patient.full_name,
                 "cpf_hash": patient.cpf.sha256_hex if patient.cpf else None,
                 "data_nascimento": patient.birth_date.isoformat(),
@@ -61,23 +77,27 @@ class PatientRepository:
                 "criado_em": patient.created_at.isoformat(),
             },
         )
-        return patient
+        row = result.mappings().first()
+        if row is None:
+            raise RuntimeError("Falha ao inserir paciente — RETURNING id não retornou valor")
+        return patient.model_copy(update={"db_id": int(row["id"])})
 
     async def get_by_id(self, entity_id: UUID) -> Patient | None:
+        """Look up a patient by domain UUID (not BIGSERIAL)."""
         result = await self._session.execute(
             text(
                 """
-                SELECT id, nome, cpf_hash, data_nascimento, sexo,
+                SELECT id, uuid, nome, cpf_hash, data_nascimento, sexo,
                        etnia, uf_nascimento, municipio_residencia,
                        uf_residencia, prematuro, idade_gestacional_semanas,
                        peso_nascimento_gramas, escolaridade, tem_diagnostico_autismo,
                        tem_diagnostico_tdah, outras_comorbidades, medicamentos_uso,
                        acompanhante_id, grau_parentesco, diagnostico_confirmado_fxs,
                        criado_por, criado_em
-                FROM pacientes WHERE id = :id
+                FROM pacientes WHERE uuid = :uuid
                 """
             ),
-            {"id": str(entity_id)},
+            {"uuid": str(entity_id)},
         )
         row = result.mappings().first()
         if row is None:
@@ -88,7 +108,7 @@ class PatientRepository:
         result = await self._session.execute(
             text(
                 """
-                SELECT id, nome, cpf_hash, data_nascimento, sexo,
+                SELECT id, uuid, nome, cpf_hash, data_nascimento, sexo,
                        etnia, uf_nascimento, municipio_residencia,
                        uf_residencia, prematuro, idade_gestacional_semanas,
                        peso_nascimento_gramas, escolaridade, tem_diagnostico_autismo,
@@ -113,7 +133,8 @@ class PatientRepository:
         raw_acompanhante_id = cast("str | None", r["acompanhante_id"])
 
         return Patient(
-            id=cast(UUID, r["id"]),
+            id=UUID(str(r["uuid"])),
+            db_id=int(r["id"]),
             cpf=None,
             full_name=cast(str, r["nome"]),
             birth_date=cast(object, r["data_nascimento"]),  # type: ignore[arg-type]

@@ -26,6 +26,16 @@ class DashboardRow:
     taxa_recomendacao_exame: float | None
 
 
+@dataclass(frozen=True)
+class DashboardSummary:
+    """Operational summary for the authenticated doctor's personal dashboard."""
+
+    total_pacientes: int
+    avaliacoes_hoje: int
+    avaliacoes_semana: int
+    taxa_recomendacao_exame: float | None  # None when no evaluations exist
+
+
 class DashboardRepository:
     """Reads from the vw_dashboard_anonimizado materialised view."""
 
@@ -87,6 +97,69 @@ class DashboardRepository:
             )
             for r in rows
         ]
+
+    async def get_summary(self, *, usuario_id: int) -> DashboardSummary:
+        """Return operational counts scoped to the authenticated doctor.
+
+        Single-query implementation: four correlated sub-selects are combined
+        so the planner can reuse seq-scan results.  All sub-selects read from
+        the 'avaliacoes' and 'pacientes' logical views (never physical tables).
+        """
+        result = await self._session.execute(
+            text(
+                """
+                SELECT
+                    (
+                        SELECT COUNT(*)
+                        FROM   pacientes
+                        WHERE  criado_por = :usuario_id
+                    ) AS total_pacientes,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM   avaliacoes a
+                        JOIN   pacientes  p ON p.id = a.paciente_id
+                        WHERE  p.criado_por      = :usuario_id
+                          AND  a.data_avaliacao::DATE = CURRENT_DATE
+                    ) AS avaliacoes_hoje,
+
+                    (
+                        SELECT COUNT(*)
+                        FROM   avaliacoes a
+                        JOIN   pacientes  p ON p.id = a.paciente_id
+                        WHERE  p.criado_por    = :usuario_id
+                          AND  a.data_avaliacao >= CURRENT_DATE - INTERVAL '7 days'
+                    ) AS avaliacoes_semana,
+
+                    (
+                        SELECT ROUND(
+                            COUNT(*) FILTER (WHERE a.recomenda_exame = TRUE)::NUMERIC
+                            / NULLIF(COUNT(*), 0), 4
+                        )
+                        FROM   avaliacoes a
+                        JOIN   pacientes  p ON p.id = a.paciente_id
+                        WHERE  p.criado_por = :usuario_id
+                    ) AS taxa_recomendacao_exame
+                """
+            ),
+            {"usuario_id": usuario_id},
+        )
+        row = result.mappings().first()
+        if row is None:
+            return DashboardSummary(
+                total_pacientes=0,
+                avaliacoes_hoje=0,
+                avaliacoes_semana=0,
+                taxa_recomendacao_exame=None,
+            )
+        return DashboardSummary(
+            total_pacientes=int(row["total_pacientes"] or 0),
+            avaliacoes_hoje=int(row["avaliacoes_hoje"] or 0),
+            avaliacoes_semana=int(row["avaliacoes_semana"] or 0),
+            taxa_recomendacao_exame=float(row["taxa_recomendacao_exame"])
+            if row["taxa_recomendacao_exame"] is not None
+            else None,
+        )
 
     async def refresh_materialized_view(self) -> None:
         """Trigger a non-blocking refresh of the materialized view.
