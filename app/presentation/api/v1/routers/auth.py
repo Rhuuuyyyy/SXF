@@ -17,6 +17,10 @@ from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
+# Credenciais de desenvolvimento — só funcionam quando DEBUG=true e sem banco.
+_DEV_EMAIL = "dev@sxf.local"
+_DEV_PASS  = "dev123"
+
 
 @router.post(
     "/login",
@@ -32,7 +36,7 @@ router = APIRouter(prefix="/auth", tags=["Autenticação"])
 async def login(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession | None = Depends(get_db_session),
 ) -> TokenLoginResponse:
     """Authenticate a doctor and open a session.
 
@@ -40,6 +44,27 @@ async def login(
     The OAuth2PasswordRequestForm uses 'username' field for email
     (standard OAuth2 convention).
     """
+    # ── Modo de desenvolvimento sem banco ────────────────────────────────────
+    if session is None:
+        if form_data.username == _DEV_EMAIL and form_data.password == _DEV_PASS:
+            access_token = issue_access_token(
+                usuario_id=1, role="doctor", sessao_id=1
+            )
+            return TokenLoginResponse(
+                access_token=access_token,
+                token_type="Bearer",  # noqa: S106
+                sessao_id=1,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=(
+                f"Banco de dados indisponível. "
+                f"Em modo de desenvolvimento use: {_DEV_EMAIL} / {_DEV_PASS}"
+            ),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # ── Fluxo normal com banco ────────────────────────────────────────────────
     auth_service = AuthService(session)
     ip_origem = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
@@ -105,9 +130,11 @@ async def login(
 )
 async def logout(
     sessao_id: int,
-    session: AsyncSession = Depends(get_db_session),
+    session: AsyncSession | None = Depends(get_db_session),
 ) -> None:
     """Close an active session in tb_log_sessoes."""
+    if session is None:
+        return  # dev mode sem banco: sem sessão a encerrar
     auth_service = AuthService(session)
     await auth_service.close_session(
         sessao_id=sessao_id,
