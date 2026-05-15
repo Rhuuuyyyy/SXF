@@ -421,6 +421,20 @@ def main() -> None:
     import time
     time.sleep(1)
 
+    # Detecta se DEBUG=true no .env para exibir credenciais dev
+    env_content = (ROOT / ".env").read_text(encoding="utf-8") if (ROOT / ".env").exists() else ""
+    is_debug = any(
+        line.strip().upper() in ("DEBUG=TRUE", "DEBUG=1", "DEBUG=YES")
+        for line in env_content.splitlines()
+    )
+
+    dev_block = ""
+    if is_debug:
+        dev_block = (
+            f"\n  {YELLOW}⚠  Modo DEV — sem banco de dados configurado{RESET}\n"
+            f"  {DIM}Login: dev@sxf.local  |  Senha: dev123{RESET}\n"
+        )
+
     print(f"""
 {BOLD}{'─' * 54}{RESET}
   {BOLD}Servidores em execução{RESET}
@@ -428,7 +442,7 @@ def main() -> None:
   {BLUE}Backend {RESET} → {BOLD}http://localhost:8000{RESET}
              API Docs: {DIM}http://localhost:8000/api/v1/docs{RESET}
   {GREEN}Frontend{RESET} → {BOLD}http://localhost:3000{RESET}
-
+{dev_block}
   {YELLOW}Ctrl+C para encerrar ambos os servidores.{RESET}
 {'─' * 54}
 """, flush=True)

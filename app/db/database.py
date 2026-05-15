@@ -18,15 +18,21 @@ engine = create_async_engine(
 AsyncSessionFactory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSessionFactory() as session:
-        await session.execute(
-            text("SELECT set_config('app.pgp_key', :key, true)"),
-            {"key": settings.pgp_key.get_secret_value()},
-        )
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
+async def get_db_session() -> AsyncGenerator[AsyncSession | None, None]:
+    try:
+        async with AsyncSessionFactory() as session:
+            await session.execute(
+                text("SELECT set_config('app.pgp_key', :key, true)"),
+                {"key": settings.pgp_key.get_secret_value()},
+            )
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+    except Exception:
+        if not settings.debug:
             raise
+        # DEBUG=true sem banco: yield None para que os endpoints decidam o fallback.
+        yield None
