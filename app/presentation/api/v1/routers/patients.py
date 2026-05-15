@@ -65,8 +65,15 @@ async def register_patient(
         else patient.full_name[0] + "***"
     )
 
+    if patient.db_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Falha interna ao recuperar ID do paciente após inserção.",
+        )
+
     return PatientResponse(
         id=patient.id,
+        db_id=patient.db_id,
         nome_masked=nome_masked,
         sexo=patient.sex_at_birth.value,
         etnia=patient.etnia.value,

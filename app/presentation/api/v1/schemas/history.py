@@ -27,7 +27,31 @@ class PatientHistoryResponse(BaseModel):
     offset: int
 
 
-# ── Dashboard ─────────────────────────────────────────────────────────────────
+# ── Dashboard Summary (operational, per-doctor) ──────────────────────────────
+
+
+class DashboardSummaryResponse(BaseModel):
+    """Operational metrics for the authenticated doctor's personal dashboard.
+
+    These are non-anonymised personal counts (scoped to the requesting doctor),
+    distinct from DashboardStatsResponse which returns anonymised epidemiological
+    aggregates subject to k-anonymity enforcement.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_pacientes: int = Field(description="Total de pacientes cadastrados pelo médico")
+    avaliacoes_hoje: int = Field(description="Avaliações realizadas hoje")
+    avaliacoes_semana: int = Field(description="Avaliações nos últimos 7 dias")
+    taxa_recomendacao_exame: float | None = Field(
+        description=(
+            "Proporção de avaliações que recomendaram exame genético (0.0–1.0). "
+            "Null quando não há avaliações."
+        )
+    )
+
+
+# ── Dashboard Epidemiological Stats (anonymised, k-anonymity enforced) ────────
 
 
 class DashboardRowSchema(BaseModel):

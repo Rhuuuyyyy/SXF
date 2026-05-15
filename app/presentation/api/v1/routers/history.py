@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.use_cases.get_dashboard_stats import GetDashboardStatsUseCase
+from app.application.use_cases.get_dashboard_summary import GetDashboardSummaryUseCase
 from app.application.use_cases.get_patient_history import GetPatientHistoryUseCase
 from app.application.use_cases.refresh_dashboard import RefreshDashboardUseCase
 from app.db.database import get_db_session
@@ -21,6 +22,7 @@ from app.presentation.api.v1.schemas.history import (
     AvaliacaoHistoricoSchema,
     DashboardRowSchema,
     DashboardStatsResponse,
+    DashboardSummaryResponse,
     PatientHistoryResponse,
 )
 
@@ -64,6 +66,33 @@ async def get_patient_history(
         total=result.total,
         limit=result.limit,
         offset=result.offset,
+    )
+
+
+@router.get(
+    "/dashboard/summary",
+    response_model=DashboardSummaryResponse,
+    summary="Resumo operacional do médico autenticado",
+    description=(
+        "Retorna contadores pessoais do médico logado: total de pacientes, "
+        "avaliações hoje, avaliações nos últimos 7 dias e taxa geral de "
+        "recomendação de exame genético. "
+        "Estes dados NÃO estão sujeitos ao k-anonimato (são dados próprios "
+        "do médico, sem cruzamento com outros profissionais). "
+        "Endpoint indicado para popular os cards do dashboard operacional."
+    ),
+)
+async def get_dashboard_summary(
+    doctor: AuthenticatedDoctor = Depends(get_current_doctor),
+    session: AsyncSession = Depends(get_db_session),
+) -> DashboardSummaryResponse:
+    use_case = GetDashboardSummaryUseCase(dashboard=DashboardRepository(session))
+    result = await use_case.execute(usuario_id=doctor.usuario_id)
+    return DashboardSummaryResponse(
+        total_pacientes=result.total_pacientes,
+        avaliacoes_hoje=result.avaliacoes_hoje,
+        avaliacoes_semana=result.avaliacoes_semana,
+        taxa_recomendacao_exame=result.taxa_recomendacao_exame,
     )
 
 

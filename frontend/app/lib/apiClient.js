@@ -1,5 +1,3 @@
-"use client";
-
 const BASE_URL =
   typeof process !== "undefined"
     ? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
@@ -38,8 +36,18 @@ async function request(path, options = {}) {
   return res.json();
 }
 
+function buildQS(params) {
+  return new URLSearchParams(
+    Object.fromEntries(
+      Object.entries(params).filter(
+        ([, v]) => v !== undefined && v !== null && v !== ""
+      )
+    )
+  ).toString();
+}
+
 // Login uses OAuth2PasswordRequestForm (application/x-www-form-urlencoded).
-// The `username` field is the email address — this is the OAuth2 standard.
+// The `username` field carries the email address — this is the OAuth2 convention.
 export const api = {
   login: (username, password) =>
     request("/api/v1/auth/login", {
@@ -57,11 +65,7 @@ export const api = {
     }),
 
   listPatients: (params = {}) => {
-    const qs = new URLSearchParams(
-      Object.fromEntries(
-        Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
-      )
-    ).toString();
+    const qs = buildQS(params);
     return request(`/api/v1/pacientes${qs ? `?${qs}` : ""}`);
   },
 
@@ -72,18 +76,17 @@ export const api = {
     }),
 
   getPatientHistory: (pacienteId, params = {}) => {
-    const qs = new URLSearchParams(params).toString();
+    const qs = buildQS(params);
     return request(
       `/api/v1/pacientes/${pacienteId}/historico${qs ? `?${qs}` : ""}`
     );
   },
 
+  getDashboardSummary: () =>
+    request("/api/v1/dashboard/summary"),
+
   getDashboardStats: (params = {}) => {
-    const qs = new URLSearchParams(
-      Object.fromEntries(
-        Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== "")
-      )
-    ).toString();
+    const qs = buildQS(params);
     return request(`/api/v1/dashboard/stats${qs ? `?${qs}` : ""}`);
   },
 };

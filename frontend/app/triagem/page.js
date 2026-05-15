@@ -32,13 +32,14 @@ const UFS_BR = [
   "PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
 ];
 
+// Values must match the Etnia StrEnum in app/domain/entities/patient.py (lowercase)
 const ETNIAS = [
-  { value: "BRANCA",        label: "Branca" },
-  { value: "PARDA",         label: "Parda" },
-  { value: "PRETA",         label: "Preta" },
-  { value: "AMARELA",       label: "Amarela" },
-  { value: "INDIGENA",      label: "Indígena" },
-  { value: "NAO_DECLARADO", label: "Não declarado" },
+  { value: "branca",        label: "Branca" },
+  { value: "parda",         label: "Parda" },
+  { value: "preta",         label: "Preta" },
+  { value: "amarela",       label: "Amarela" },
+  { value: "indigena",      label: "Indígena" },
+  { value: "nao_declarado", label: "Não declarado" },
 ];
 
 // ── COMPONENTES UTILITÁRIOS ───────────────────────────────────────────────
@@ -217,19 +218,20 @@ export default function TriagemPage() {
       const sessaoId = getSessaoId();
 
       // 1. Registrar o paciente
+      // PatientResponse.db_id (BIGSERIAL) é retornado diretamente — sem segundo GET.
       const patientPayload = {
         nome:                  paciente.nome,
         data_nascimento:       paciente.dataNasc,
         sexo:                  paciente.sexo,
         etnia:                 paciente.etnia,
-        uf_nascimento:         paciente.uf,   // padrão: mesmo estado de residência
+        uf_nascimento:         paciente.uf,  // padrão: mesmo estado de residência
         municipio_residencia:  paciente.municipio,
         uf_residencia:         paciente.uf,
-        // campos opcionais com defaults
+        grau_parentesco:       acomp.relacao || null,
         prematuro:             false,
         tem_diagnostico_autismo: false,
         tem_diagnostico_tdah:    false,
-        // acompanhante (somente se telefone e e-mail preenchidos)
+        // acompanhante (somente se telefone e e-mail preenchidos — ambos obrigatórios no schema)
         ...(acomp.telefone && acomp.email
           ? {
               acompanhante: {
@@ -241,19 +243,15 @@ export default function TriagemPage() {
           : {}),
       };
 
-      await api.createPatient(patientPayload);
+      const registeredPatient = await api.createPatient(patientPayload);
 
-      // 2. Recuperar o ID inteiro do paciente recém-criado via listagem por nome
-      // O backend retorna UUID no POST mas o endpoint de avaliações precisa do ID serial.
-      const listResult = await api.listPatients({ nome: paciente.nome, limit: 10 });
-      const found = listResult?.items?.find((p) =>
-        p.nome.toLowerCase().startsWith(paciente.nome.split(" ")[0].toLowerCase())
-      );
-      if (!found) {
-        throw new Error("Paciente registrado, mas não foi possível recuperar seu ID. Tente novamente.");
+      // db_id é o BIGSERIAL retornado pelo POST /pacientes — usado diretamente
+      const pacienteDbId = registeredPatient?.db_id;
+      if (!pacienteDbId) {
+        throw new Error("ID do paciente não retornado pelo servidor. Contate o suporte.");
       }
 
-      // 3. Submeter a anamnese
+      // 2. Submeter a anamnese
       const respostasPayload = sintomasFiltrados.map((s) => ({
         sintoma_id: SINTOMA_ID_MAP[s.id],
         presente:   respostas[s.id] === 1,
@@ -261,7 +259,7 @@ export default function TriagemPage() {
       }));
 
       const avalResult = await api.submitAnamnesis({
-        paciente_id:           found.id,
+        paciente_id:           pacienteDbId,
         sessao_id:             sessaoId,
         observacoes:           "",
         diagnostico_previo_fxs: false,

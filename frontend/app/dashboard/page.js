@@ -236,7 +236,7 @@ export default function DashboardPage() {
   // API data state
   const [patients, setPatients]               = useState([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
-  const [totalPatients, setTotalPatients]     = useState(null);
+  const [summary, setSummary]                 = useState(null);
 
   // Auth guard — redirect to login if no token
   useEffect(() => {
@@ -260,11 +260,11 @@ export default function DashboardPage() {
       .finally(() => setPatientsLoading(false));
   }, [page]);
 
-  // Load total patient count on mount (for the stat card)
+  // Load operational summary on mount (powers the four stat cards)
   useEffect(() => {
     if (!isAuthenticated()) return;
-    api.listPatients({ limit: 1 })
-      .then((res) => setTotalPatients(res?.total ?? null))
+    api.getDashboardSummary()
+      .then((res) => setSummary(res))
       .catch(() => {});
   }, []);
 
@@ -429,10 +429,33 @@ export default function DashboardPage() {
           {page === "dashboard" && (
             <div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-5">
-                <StatCard label="Agendados hoje"   value="—" sub="Sem registros"  accent="blue" />
-                <StatCard label="Confirmados"       value="—" sub="Sem registros"  accent="green" />
-                <StatCard label="Desmarcados"       value="—" sub="Sem registros"  accent="red" />
-                <StatCard label="Total de pacientes" value={totalPatients !== null ? String(totalPatients) : "—"} sub={totalPatients !== null ? "pacientes cadastrados" : "Sem cadastros"} />
+                <StatCard
+                  label="Triagens hoje"
+                  value={summary ? String(summary.avaliacoes_hoje) : "—"}
+                  sub="avaliações realizadas hoje"
+                  accent="blue"
+                />
+                <StatCard
+                  label="Esta semana"
+                  value={summary ? String(summary.avaliacoes_semana) : "—"}
+                  sub="avaliações nos últimos 7 dias"
+                  accent="green"
+                />
+                <StatCard
+                  label="Taxa de encaminhamento"
+                  value={
+                    summary && summary.taxa_recomendacao_exame !== null
+                      ? `${(summary.taxa_recomendacao_exame * 100).toFixed(1)}%`
+                      : "—"
+                  }
+                  sub="recomendações de exame genético"
+                  accent="red"
+                />
+                <StatCard
+                  label="Total de pacientes"
+                  value={summary ? String(summary.total_pacientes) : "—"}
+                  sub="pacientes cadastrados"
+                />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 mb-5">
