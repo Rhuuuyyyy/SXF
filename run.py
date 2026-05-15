@@ -33,7 +33,6 @@ VENV_DIR = ROOT / ".venv"
 IS_WIN = platform.system() == "Windows"
 
 VENV_PYTHON  = VENV_DIR / ("Scripts" if IS_WIN else "bin") / ("python.exe" if IS_WIN else "python")
-VENV_UVICORN = VENV_DIR / ("Scripts" if IS_WIN else "bin") / ("uvicorn.exe" if IS_WIN else "uvicorn")
 NPM          = "npm.cmd" if IS_WIN else "npm"
 
 # ── Cores ANSI ────────────────────────────────────────────────────────────────
@@ -266,22 +265,25 @@ def setup_frontend_env() -> None:
 def start_backend() -> subprocess.Popen:
     step("Iniciando Backend — FastAPI + uvicorn")
 
-    if not VENV_UVICORN.exists():
-        err(f"uvicorn não encontrado em {VENV_UVICORN}")
+    if not VENV_PYTHON.exists():
+        err(f"Python do virtualenv não encontrado em {VENV_PYTHON}")
         err("Execute sem --skip-install para instalar as dependências.")
         sys.exit(1)
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
 
+    # Usa "python -m uvicorn" em vez do executável direto para contornar
+    # restrições de execução de binários em .venv\Scripts\ no Windows.
     proc = subprocess.Popen(
         [
-            str(VENV_UVICORN),
+            str(VENV_PYTHON),
+            "-m", "uvicorn",
             "app.main:app",
             "--host", "0.0.0.0",
             "--port", "8000",
             "--reload",
-            "--reload-dir", str(ROOT / "app"),  # observa só o código Python
+            "--reload-dir", str(ROOT / "app"),
         ],
         cwd=ROOT,
         env=env,
