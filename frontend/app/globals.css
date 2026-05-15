@@ -1,26 +1,184 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════
+   CITO CLINICAL — CSS DESIGN SYSTEM
+   ═══════════════════════════════════════════════ */
+
+/* ── LIGHT MODE VARIABLES ── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #FFFFFF;
+  --paper-2: #F4F4F4;
+  --surface: #FFFFFF;
+  --surface-2: #FAFAFA;
+  --ink: #0A0A0A;
+  --ink-2: #1F1F1F;
+  --muted: #6B6B6B;
+  --subtle: #A1A1A1;
+  --hair: #E5E5E5;
+  --hair-soft: #EFEFEF;
+  --on-ink: #FFFFFF;
+  --on-ink-55: rgba(255, 255, 255, 0.55);
+  --on-ink-35: rgba(255, 255, 255, 0.35);
+  --on-ink-14: rgba(255, 255, 255, 0.14);
+  --on-ink-08: rgba(255, 255, 255, 0.08);
+  --hover-tint: rgba(10, 10, 10, 0.04);
+  --topbar-bg: rgba(255, 255, 255, 0.85);
+  --honey: #525252;
+  --honey-soft: #EFEFEF;
+  --sage: #6B6B6B;
+  --sage-soft: #F4F4F4;
+  --rust: #0A0A0A;
+  --rust-soft: #F0F0F0;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── DARK MODE VARIABLES ── */
+[data-theme="dark"] {
+  --paper: #0A0A0A;
+  --paper-2: #161616;
+  --surface: #141414;
+  --surface-2: #1C1C1C;
+  --ink: #F5F5F5;
+  --ink-2: #E5E5E5;
+  --muted: #909090;
+  --subtle: #5A5A5A;
+  --hair: #2A2A2A;
+  --hair-soft: #1F1F1F;
+  --on-ink: #0A0A0A;
+  --on-ink-55: rgba(10, 10, 10, 0.62);
+  --on-ink-35: rgba(10, 10, 10, 0.42);
+  --on-ink-14: rgba(10, 10, 10, 0.18);
+  --on-ink-08: rgba(10, 10, 10, 0.10);
+  --hover-tint: rgba(245, 245, 245, 0.06);
+  --topbar-bg: rgba(10, 10, 10, 0.85);
+  --honey: #A8A8A8;
+  --honey-soft: #1F1F1F;
+  --sage: #909090;
+  --sage-soft: #1C1C1C;
+  --rust: #F5F5F5;
+  --rust-soft: #1F1F1F;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── BASE ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── SELECTION ── */
+::selection {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── UTILITY CLASSES ── */
+
+.lift {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+/* Card shadow — light mode */
+.card-shadow {
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02), 0 4px 12px -6px rgba(0, 0, 0, 0.05);
+}
+
+/* Card shadow — dark mode */
+[data-theme="dark"] .card-shadow {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 4px 16px -6px rgba(0, 0, 0, 0.5);
+}
+
+.card-shadow-hover:hover {
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.04), 0 8px 24px -6px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+[data-theme="dark"] .card-shadow-hover:hover {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 8px 32px -6px rgba(0, 0, 0, 0.7);
+  transform: translateY(-2px);
+}
+
+.anim-fade-in {
+  animation: fadeIn 0.4s ease;
+}
+
+.anim-fade-up {
+  animation: fadeUp 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.font-display {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+}
+
+.num-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.focus-ink:focus {
+  outline: none;
+  border-color: var(--ink) !important;
+  box-shadow: 0 0 0 4px rgba(14, 14, 16, 0.06);
+}
+
+[data-theme="dark"] .focus-ink:focus {
+  box-shadow: 0 0 0 4px rgba(245, 245, 245, 0.08);
+}
+
+/* ── CUSTOM SCROLLBAR ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hair);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--subtle);
+}
+
+/* ── DATE INPUT FIX ── */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
 }
