@@ -15,8 +15,10 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -131,16 +133,16 @@ def setup_venv() -> None:
 def install_python_deps() -> None:
     step("Instalando dependências Python (pip install -e .)")
 
-    # Silently upgrade pip first
     subprocess.run(
-        [str(VENV_PYTHON), "-m", "pip", "install", "--upgrade", "pip", "--quiet"],
+        [str(VENV_PYTHON), "-m", "pip", "install", "--upgrade", "pip",
+         "--quiet", "--no-cache-dir"],
         cwd=ROOT,
         check=True,
     )
 
-    # Install project + all declared dependencies in editable mode
     result = subprocess.run(
-        [str(VENV_PYTHON), "-m", "pip", "install", "-e", ".", "--quiet"],
+        [str(VENV_PYTHON), "-m", "pip", "install", "-e", ".",
+         "--quiet", "--no-cache-dir"],
         cwd=ROOT,
         check=False,
     )
@@ -199,6 +201,39 @@ def install_node_deps() -> None:
 
 # ── Arquivos de configuração (.env) ──────────────────────────────────────────
 
+_CORS_DEV = '["http://localhost:3000"]'
+
+
+def _fix_cors_origins(content: str) -> tuple[str, bool]:
+    """Garante que CORS_ORIGINS seja um JSON array (exigido pelo pydantic-settings v2).
+
+    Aceita qualquer formato já existente (string simples, csv, JSON) e normaliza.
+    Retorna (conteúdo_atualizado, houve_mudança).
+    """
+    m = re.search(r'^CORS_ORIGINS\s*=\s*(.*)$', content, re.MULTILINE)
+    if not m:
+        return content.rstrip('\n') + f'\nCORS_ORIGINS={_CORS_DEV}\n', True
+
+    raw = m.group(1).strip()
+
+    # Já é JSON array válido?
+    if raw.startswith('['):
+        try:
+            json.loads(raw)
+            return content, False  # nada a fazer
+        except json.JSONDecodeError:
+            pass
+
+    # Converte string simples ou lista CSV em JSON array
+    origins = [o.strip() for o in raw.split(',') if o.strip()]
+    if not origins:
+        origins = ["http://localhost:3000"]
+    replacement = f'CORS_ORIGINS={json.dumps(origins)}'
+    updated = re.sub(r'^CORS_ORIGINS\s*=\s*.*$', replacement, content,
+                     flags=re.MULTILINE)
+    return updated, True
+
+
 def setup_backend_env() -> None:
     step("Configuração do Backend (.env)")
 
@@ -206,30 +241,20 @@ def setup_backend_env() -> None:
     env_example = ROOT / ".env.example"
 
     if env_file.exists():
+        content = env_file.read_text(encoding="utf-8")
+        updated, changed = _fix_cors_origins(content)
+        if changed:
+            env_file.write_text(updated, encoding="utf-8")
+            info(f"CORS_ORIGINS corrigido para formato JSON array em .env")
         ok(".env já existe")
-
-        # Garantir que CORS_ORIGINS inclua localhost:3000
-        content = env_file.read_text()
-        if "CORS_ORIGINS" not in content:
-            env_file.write_text(content.rstrip() + "\nCORS_ORIGINS=http://localhost:3000\n")
-            info("CORS_ORIGINS=http://localhost:3000 adicionado ao .env")
         return
 
     if env_example.exists():
-        shutil.copy(env_example, env_file)
-
-        # Garantir CORS
-        content = env_file.read_text()
-        if "CORS_ORIGINS=" not in content or "CORS_ORIGINS=\n" in content:
-            content = content.replace("CORS_ORIGINS=\n", "CORS_ORIGINS=http://localhost:3000\n")
-            content = content.replace("CORS_ORIGINS= \n", "CORS_ORIGINS=http://localhost:3000\n")
-            if "CORS_ORIGINS" not in content:
-                content += "\nCORS_ORIGINS=http://localhost:3000\n"
-            env_file.write_text(content)
-
+        content = env_example.read_text(encoding="utf-8")
+        updated, _ = _fix_cors_origins(content)
+        env_file.write_text(updated, encoding="utf-8")
         ok(".env criado a partir do .env.example")
     else:
-        # Cria com valores mínimos de desenvolvimento
         env_file.write_text(
             'APP_NAME="SXFp Backend"\n'
             "APP_VERSION=0.1.0\n"
@@ -237,9 +262,10 @@ def setup_backend_env() -> None:
             "DEBUG=true\n"
             "API_PREFIX=/api/v1\n"
             "SECRET_KEY=dev-secret-mude-em-producao\n"
-            "CORS_ORIGINS=http://localhost:3000\n"
+            f"CORS_ORIGINS={_CORS_DEV}\n"
             "# DATABASE_URL=postgresql+asyncpg://user:senha@host:5432/sxfp\n"
-            "# PGP_KEY=chave-pgp-para-criptografia\n"
+            "# PGP_KEY=chave-pgp-para-criptografia\n",
+            encoding="utf-8",
         )
         ok(".env criado com valores padrão de desenvolvimento")
 
