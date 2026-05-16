@@ -39,3 +39,8 @@ htmlcov/
 Notes/.obsidian/workspace*
 Notes/.obsidian/cache
 Notes/.trash/
+
+# .Next e node_modules
+
+node_modules/
+.next/
