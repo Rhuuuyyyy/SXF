@@ -105,17 +105,21 @@ def check_prerequisites() -> None:
         sys.exit(1)
     ok(f"Python {sys.version.split()[0]}")
 
-    for tool, url in [
-        ("node", "https://nodejs.org"),
-        ("npm",  "https://nodejs.org"),
-    ]:
-        if not shutil.which(tool) and not (IS_WIN and shutil.which(f"{tool}.cmd")):
-            err(f"'{tool}' não encontrado. Instale Node.js em {url}")
-            sys.exit(1)
+    # Node.js só é necessário para frontend Next.js; frontend estático usa Python http.server.
+    if (FRONTEND / "package.json").exists():
+        for tool, url in [
+            ("node", "https://nodejs.org"),
+            ("npm",  "https://nodejs.org"),
+        ]:
+            if not shutil.which(tool) and not (IS_WIN and shutil.which(f"{tool}.cmd")):
+                err(f"'{tool}' não encontrado. Instale Node.js em {url}")
+                sys.exit(1)
 
-    node_ver = subprocess.check_output(["node", "--version"], text=True).strip()
-    npm_ver  = subprocess.check_output([NPM, "--version"], text=True).strip()
-    ok(f"Node.js {node_ver}  |  npm {npm_ver}")
+        node_ver = subprocess.check_output(["node", "--version"], text=True).strip()
+        npm_ver  = subprocess.check_output([NPM, "--version"], text=True).strip()
+        ok(f"Node.js {node_ver}  |  npm {npm_ver}")
+    else:
+        ok("Frontend estático — Node.js não necessário")
 
 
 # ── Virtualenv e dependências Python ─────────────────────────────────────────
@@ -157,6 +161,11 @@ def install_python_deps() -> None:
 # ── Dependências Node.js ──────────────────────────────────────────────────────
 
 def install_node_deps() -> None:
+    # Frontend estático (sem package.json) não precisa de npm.
+    if not (FRONTEND / "package.json").exists():
+        ok("Frontend estático detectado — npm install não necessário")
+        return
+
     step("Instalando dependências Node.js (npm install)")
 
     node_modules = FRONTEND / "node_modules"
@@ -273,6 +282,11 @@ def setup_backend_env() -> None:
 
 
 def setup_frontend_env() -> None:
+    # Frontend estático não usa variáveis de ambiente do Next.js.
+    if not (FRONTEND / "package.json").exists():
+        ok("Frontend estático — .env.local não necessário")
+        return
+
     step("Configuração do Frontend (.env.local)")
 
     env_local = FRONTEND / ".env.local"
@@ -326,6 +340,23 @@ def start_backend() -> subprocess.Popen:
 
 
 def start_frontend() -> subprocess.Popen:
+    # Frontend estático: usa o http.server embutido do Python.
+    if not (FRONTEND / "package.json").exists():
+        step("Iniciando Frontend — servidor HTTP estático (porta 3000)")
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "http.server", "3000"],
+            cwd=FRONTEND,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        _procs.append(proc)
+        return proc
+
     step("Iniciando Frontend — Next.js")
 
     env = os.environ.copy()
